@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# ================= НАСТРОЙКИ =================
+MUSIC_DIR="$1"
+DB_HOST="localhost"
+DB_PORT="5434"
+DB_NAME="discography"
+DB_USER="postgres"
+DB_PASS="postgres"
+# =============================================
+
+if [ -z "$MUSIC_DIR" ]; then
+    echo "Использование: $0 <путь_к_папке_с_альбомами>"
+    exit 1
+fi
+
+export PGPASSWORD="$DB_PASS"
+
+# === ОЧИСТКА ТАБЛИЦЫ ПЕРЕД ИМПОРТОМ ===
+echo "Очистка таблицы albums..."
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c \
+    "TRUNCATE albums RESTART IDENTITY;" > /dev/null 2>&1
+# ======================================
+
+echo "Начинаю импорт из: $MUSIC_DIR"
+
+for album_dir in "$MUSIC_DIR"/*/; do
+    [ -d "$album_dir" ] || continue
+    
+    album_name=$(basename "$album_dir")
+    
+    # 1. Год (первые 4 символа)
+    year="${album_name:0:4}"
+    [[ "$year" =~ ^[0-9]{4}$ ]] || year=0
+    
+    # 2. Формат (только FLAC или DSF)
+    first_track=$(find "$album_dir" -maxdepth 1 -type f \( -iname "*.flac" -o -iname "*.dsf" \) | head -n 1)
+    
+    if [ -n "$first_track" ]; then
+        format="${first_track##*.}"
+        format=$(echo "$format" | tr '[:lower:]' '[:upper:]')
+    else
+        format="UNKNOWN"
+    fi
+    
+    # 3. Размер (сумма всех файлов в папке)
+    total_size=0
+    while IFS= read -r -d '' file; do
+        size=$(stat -f%z "$file" 2>/dev/null)
+        [ -n "$size" ] && total_size=$((total_size + size))
+    done < <(find "$album_dir" -type f -print0)
+    
+    # 4. Вставка в БД
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c \
+        "INSERT INTO albums (format, year, size) VALUES ('$format', $year, $total_size);" > /dev/null
+    
+    echo "Альбом: $album_name | Год: $year | Формат: $format | Вес: $total_size байт"
+done
+
+echo "Готово."
+unset PGPASSWORD
