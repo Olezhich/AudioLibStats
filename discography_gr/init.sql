@@ -7,9 +7,12 @@ CREATE TABLE albums (
     size FLOAT NOT NULL
 );
 
+DROP VIEW IF EXISTS album_count;
+
 CREATE OR REPLACE VIEW album_count AS
 
 WITH 
+
 flac AS 
 (
 SELECT year, COUNT(*) 
@@ -30,7 +33,7 @@ all_years AS (
   SELECT generate_series((SELECT MIN(year) FROM albums), (SELECT MAX(year) FROM albums)) AS year
 )
 
-SELECT make_date(a.year, 1, 1) AS year, 
+SELECT make_date(a.year, 1,1) AS year, 
 COALESCE(dsf.count, 0) AS dsf,
 COALESCE(flac.count, 0) AS flac,
 COALESCE(dsf.count, 0) + COALESCE(flac.count, 0) AS all
@@ -39,5 +42,7 @@ FROM all_years as a
 LEFT JOIN dsf ON a.year=dsf.year
 LEFT JOIN flac ON a.year=flac.year
 
-ORDER BY year
+ORDER BY year;
+
+
 
