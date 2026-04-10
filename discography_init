@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ================= НАСТРОЙКИ =================
-MUSIC_DIR="$1"
+LIBRARY_ROOT="$1"
 DB_HOST="localhost"
 DB_PORT="5434"
 DB_NAME="discography"
@@ -9,8 +9,13 @@ DB_USER="postgres"
 DB_PASS="postgres"
 # =============================================
 
-if [ -z "$MUSIC_DIR" ]; then
-    echo "Использование: $0 <путь_к_папке_с_альбомами>"
+if [ -z "$LIBRARY_ROOT" ]; then
+    echo "Использование: $0 <путь_к_Audio_Library>"
+    exit 1
+fi
+
+if [ ! -d "$LIBRARY_ROOT" ]; then
+    echo "Ошибка: Директория '$LIBRARY_ROOT' не найдена."
     exit 1
 fi
 
@@ -22,39 +27,63 @@ psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c \
     "TRUNCATE albums RESTART IDENTITY;" > /dev/null 2>&1
 # ======================================
 
-echo "Начинаю импорт из: $MUSIC_DIR"
+echo "Начинаю импорт из: $LIBRARY_ROOT"
 
-for album_dir in "$MUSIC_DIR"/*/; do
-    [ -d "$album_dir" ] || continue
+# Проходим по всем поддиректориям первого уровня (категории: Studio_Albums, Compilations и т.д.)
+for category_dir in "$LIBRARY_ROOT"/*/; do
+    [ -d "$category_dir" ] || continue
     
-    album_name=$(basename "$album_dir")
+    # Извлекаем имя категории из пути
+    category=$(basename "$category_dir")
     
-    # 1. Год (первые 4 символа)
-    year="${album_name:0:4}"
-    [[ "$year" =~ ^[0-9]{4}$ ]] || year=0
-    
-    # 2. Формат (только FLAC или DSF)
-    first_track=$(find "$album_dir" -maxdepth 1 -type f \( -iname "*.flac" -o -iname "*.dsf" \) | head -n 1)
-    
-    if [ -n "$first_track" ]; then
-        format="${first_track##*.}"
-        format=$(echo "$format" | tr '[:lower:]' '[:upper:]')
-    else
-        format="UNKNOWN"
-    fi
-    
-    # 3. Размер (сумма всех файлов в папке)
-    total_size=0
-    while IFS= read -r -d '' file; do
-        size=$(stat -f%z "$file" 2>/dev/null)
-        [ -n "$size" ] && total_size=$((total_size + size))
-    done < <(find "$album_dir" -type f -print0)
-    
-    # 4. Вставка в БД
-    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c \
-        "INSERT INTO albums (format, year, size) VALUES ('$format', $year, $total_size);" > /dev/null
-    
-    echo "Альбом: $album_name | Год: $year | Формат: $format | Вес: $total_size байт"
+    echo "--- Обработка категории: $category ---"
+
+    # Проходим по всем поддиректориям второго уровня (альбомы)
+    for album_dir in "$category_dir"/*/; do
+        [ -d "$album_dir" ] || continue
+        
+        album_name=$(basename "$album_dir")
+        
+        # 1. Год (первые 4 символа имени папки альбома)
+        year="${album_name:0:4}"
+        if [[ ! "$year" =~ ^[0-9]{4}$ ]]; then
+            year=0
+        fi
+        
+        # 2. Формат (поиск первого FLAC или DSF файла в папке альбома)
+        first_track=$(find "$album_dir" -maxdepth 1 -type f \( -iname "*.flac" -o -iname "*.dsf" \) | head -n 1)
+        
+        if [ -n "$first_track" ]; then
+            format="${first_track##*.}"
+            format=$(echo "$format" | tr '[:lower:]' '[:upper:]')
+        else
+            format="UNKNOWN"
+        fi
+        
+        # 3. Размер (сумма всех файлов в папке альбома)
+        # Используем find с -print0 и stat для корректной обработки пробелов
+        total_size=0
+        while IFS= read -r -d '' file; do
+            # stat -f%z для macOS, stat -c%s для Linux. 
+            # Так как у вас macOS (из памяти), оставляем -f%z. 
+            # Если запустите на Linux, замените на -c%s
+            size=$(stat -f%z "$file" 2>/dev/null)
+            if [ -n "$size" ]; then
+                total_size=$((total_size + size))
+            fi
+        done < <(find "$album_dir" -type f -print0)
+        
+        # Экранирование одиночных кавычек в названии категории и формате для SQL
+        # (на случай если в имени категории есть кавычки, хотя это редкость)
+        safe_category=$(echo "$category" | sed "s/'/''/g")
+        safe_format=$(echo "$format" | sed "s/'/''/g")
+
+        # 4. Вставка в БД
+        psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c \
+            "INSERT INTO albums (format, category, year, size) VALUES ('$safe_format', '$safe_category', $year, $total_size);" > /dev/null
+        
+        echo "  [+] Альбом: $album_name | Категория: $category | Год: $year | Формат: $format | Вес: $total_size байт"
+    done
 done
 
 echo "Готово."

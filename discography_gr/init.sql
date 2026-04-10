@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS albums;
 CREATE TABLE albums (
     id SERIAL PRIMARY KEY,
     format TEXT NOT NULL,
+    category TEXT NOT NULL,
     year INT NOT NULL,
     size FLOAT NOT NULL
 );
@@ -43,6 +44,22 @@ LEFT JOIN dsf ON a.year=dsf.year
 LEFT JOIN flac ON a.year=flac.year
 
 ORDER BY year;
+
+DROP VIEW IF EXISTS by_size_gb;
+
+CREATE VIEW by_size_gb AS
+
+SELECT format, (SUM(size)/1024/1024/1024)::NUMERIC(6,1) as size_gb
+FROM albums
+GROUP BY format;
+
+DROP VIEW IF EXISTS by_album_count;
+
+CREATE VIEW by_album_count AS
+
+SELECT format, (SUM(size)/1024/1024/1024)::NUMERIC(6,1) as size_gb
+FROM albums
+GROUP BY format;
 
 
 
