@@ -34,7 +34,7 @@ all_years AS (
   SELECT generate_series((SELECT MIN(year) FROM albums), (SELECT MAX(year) FROM albums)) AS year
 ),
 
-wo_gamma AS
+by_year AS
 (
 SELECT make_date(a.year, 1,1) AS year, 
 COALESCE(flac_albums.count, 0) AS FLAC,
@@ -60,9 +60,21 @@ DROP VIEW IF EXISTS by_album_count;
 
 CREATE VIEW by_album_count AS
 
-SELECT format, (SUM(size)/1024/1024/1024)::NUMERIC(6,1) as size_gb
+SELECT format AS type, COUNT(*) AS albums
 FROM albums
 GROUP BY format;
+
+DROP VIEW IF EXISTS total_size;
+
+CREATE VIEW total_size AS
+
+SELECT SUM(size)/1024/1024/1024::NUMERIC(6,1) FROM albums;
+
+DROP VIEW IF EXISTS total_albums;
+
+CREATE VIEW total_albums AS
+
+SELECT COUNT(*) FROM albums;
 
 
 
