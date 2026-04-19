@@ -14,36 +14,39 @@ CREATE OR REPLACE VIEW album_count AS
 
 WITH 
 
-flac AS 
+flac_albums AS 
 (
 SELECT year, COUNT(*) 
 FROM albums
-WHERE format = 'FLAC'
+WHERE format = 'FLAC' AND category = '1_Studio_Albums'
 GROUP BY year
 ),
 
-dsf AS
+dsf_albums AS
 (
 SELECT year, COUNT(*)
 FROM albums
-WHERE format = 'DSF'
+WHERE format = 'DSF' AND category = '1_Studio_Albums'
 GROUP BY year
 ),
 
 all_years AS (
   SELECT generate_series((SELECT MIN(year) FROM albums), (SELECT MAX(year) FROM albums)) AS year
-)
+),
 
+wo_gamma AS
+(
 SELECT make_date(a.year, 1,1) AS year, 
-COALESCE(dsf.count, 0) AS dsf,
-COALESCE(flac.count, 0) AS flac,
-COALESCE(dsf.count, 0) + COALESCE(flac.count, 0) AS all
+COALESCE(flac_albums.count, 0) AS FLAC,
+COALESCE(dsf_albums.count, 0) AS DSF,
+COALESCE(dsf_albums.count, 0) + COALESCE(flac_albums.count, 0)  AS all_
 
 FROM all_years as a 
-LEFT JOIN dsf ON a.year=dsf.year
-LEFT JOIN flac ON a.year=flac.year
+LEFT JOIN dsf_albums ON a.year=dsf_albums.year
+LEFT JOIN flac_albums ON a.year=flac_albums.year
 
-ORDER BY year;
+ORDER BY year
+)
 
 DROP VIEW IF EXISTS by_size_gb;
 
