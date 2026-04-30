@@ -25,4 +25,5 @@ services:
       GF_PUBLIC_DASHBOARDS_ENABLED: true
     volumes:
       - ./grafana_data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
 
