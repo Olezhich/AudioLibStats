@@ -3,7 +3,7 @@ apiVersion: 1
 datasources:
   - name: PostgreSQL
     type: postgres
-    uid: afhvwixkw91j4a          # Фиксированный UID для привязки в дашборде
+    uid: "afhvwixkw91j4a"          # Фиксированный UID для привязки в дашборде
     url: db:5432       # Имя сервиса в docker-compose
     database: discography
     user: postgres
